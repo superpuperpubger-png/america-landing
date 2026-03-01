@@ -29,6 +29,12 @@ import {
   Send,
   MapPin,
   BookOpen,
+  Phone,
+  PhoneCall,
+  Image as ImageIcon,
+  Film,
+  Trash2,
+  Paperclip,
 } from 'lucide-react'
 import { io } from 'socket.io-client'
 import * as api from './api'
@@ -74,6 +80,10 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
+  const [chatAttachment, setChatAttachment] = useState(null)
+  const [chatUploadError, setChatUploadError] = useState('')
+  const [chatUploading, setChatUploading] = useState(false)
+  const [callNumber, setCallNumber] = useState('')
   const [traffic, setTraffic] = useState({ totalVisits: 0, onlineNow: 0 })
   const socketRef = useRef(null)
   const chatListRef = useRef(null)
@@ -195,14 +205,80 @@ export default function App() {
     setToken(null)
     setUser(null)
     setChatOpen(false)
+    setChatAttachment(null)
+    setChatUploadError('')
+    setCallNumber('')
   }
 
-  const sendMessage = (e) => {
+  const handleChatFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setChatAttachment(null)
+      return
+    }
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      setChatUploadError('Можно отправлять только фото и видео')
+      setChatAttachment(null)
+      return
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setChatUploadError('Файл слишком большой (макс. 20 МБ)')
+      setChatAttachment(null)
+      return
+    }
+    setChatUploadError('')
+    setChatAttachment(file)
+  }
+
+  const handleClearChat = () => {
+    if (!socketRef.current) return
+    const ok = window.confirm('Очистить чат для всех пользователей?')
+    if (!ok) return
+    socketRef.current.emit('chat:clear')
+  }
+
+  const handleCall = () => {
+    const raw = callNumber.replace(/[^\d+]/g, '')
+    if (!raw || raw.length < 5) return
+    window.location.href = `tel:${raw}`
+  }
+
+  const sendMessage = async (e) => {
     e.preventDefault()
-    const text = chatInput.trim()
-    if (!text || !user || !socketRef.current) return
-    socketRef.current.emit('chat:message', { user: { id: user.id, username: user.username }, text })
-    setChatInput('')
+    if (!user || !socketRef.current) return
+
+    const hasText = chatInput.trim().length > 0
+    const hasFile = !!chatAttachment
+
+    if (!hasText && !hasFile) return
+
+    try {
+      setChatUploadError('')
+      if (hasFile) {
+        setChatUploading(true)
+        const sent = await api.uploadChatFile({
+          file: chatAttachment,
+          userId: user.id,
+          username: user.username,
+          text: chatInput,
+        })
+        // Сообщение придёт через socket.io, но на случай задержек можно оптимистично добавить
+        setChatMessages((prev) => [...prev, sent])
+        setChatAttachment(null)
+        setChatInput('')
+      } else if (hasText) {
+        socketRef.current.emit('chat:message', {
+          user: { id: user.id, username: user.username },
+          text: chatInput,
+          type: 'text',
+        })
+        setChatInput('')
+      }
+    } catch (err) {
+      setChatUploadError(err.message || 'Ошибка отправки файла')
+    } finally {
+      setChatUploading(false)
+    }
   }
 
   useEffect(() => {
@@ -333,6 +409,35 @@ export default function App() {
         .feature-card { opacity: 0; }
         .chevron-open { transform: rotate(180deg); transition: transform 0.25s ease; }
         .chevron-closed { transform: rotate(0deg); transition: transform 0.25s ease; }
+        .retro-phone {
+          border-radius: 32px;
+          box-shadow:
+            0 0 0 2px rgba(255,255,255,0.06),
+            0 18px 40px rgba(0,0,0,0.6);
+          background: radial-gradient(circle at 20% 0, #1f2937 0, #020617 55%, #000 100%);
+        }
+        .retro-phone-inner {
+          border-radius: 26px;
+          background: linear-gradient(180deg, rgba(15,23,42,0.95), rgba(2,6,23,0.98));
+        }
+        .retro-phone-speaker {
+          width: 80px;
+          height: 6px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #020617, #64748b, #020617);
+        }
+        .retro-phone-camera {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: radial-gradient(circle at 30% 30%, #f1f5f9, #020617);
+        }
+        .retro-phone-home {
+          width: 70px;
+          height: 22px;
+          border-radius: 999px;
+          background: radial-gradient(circle at 50% 0, #e5e7eb, #020617);
+        }
       `}</style>
 
       {/* Navbar */}
@@ -475,44 +580,249 @@ export default function App() {
 
       {/* Chat panel */}
       {chatOpen && (
-        <div className="fixed bottom-0 right-0 z-50 w-full sm:w-[400px] h-[70vh] sm:h-[500px] flex flex-col bg-[#0f0f18] border border-white/10 border-b-0 sm:rounded-tl-2xl shadow-2xl">
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-blue-400" />
-              <span className="font-semibold text-white">Чат</span>
-              <span className="text-xs text-slate-500">· онлайн {traffic.onlineNow}</span>
-            </div>
-            <button onClick={() => setChatOpen(false)} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"><X className="w-5 h-5" /></button>
-          </div>
-          {user ? (
-            <>
-              <div ref={chatListRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-                {chatMessages.length === 0 && <p className="text-slate-500 text-sm text-center py-4">Пока сообщений нет. Напишите первым!</p>}
-                {chatMessages.map((m) => (
-                  <div key={m.id} className={`flex ${m.userId === user.id ? 'justify-end' : ''}`}>
-                    <div className={`max-w-[85%] rounded-xl px-3 py-2 ${m.userId === user.id ? 'bg-gradient-to-r from-blue-500/30 to-red-500/30 text-white' : 'bg-white/10 text-slate-200'}`}>
-                      <p className="text-xs text-slate-400">{m.username}</p>
-                      <p className="text-sm">{m.text}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{new Date(m.time).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</p>
-                    </div>
+        <div className="fixed bottom-3 right-3 z-50 w-full sm:w-[380px] md:w-[400px] flex items-end justify-end">
+          <div className="retro-phone w-full max-w-[360px] h-[560px] px-3 pt-3 pb-4">
+            <div className="retro-phone-inner w-full h-full flex flex-col px-3 pt-3 pb-3">
+              {/* Top hardware elements */}
+              <div className="flex flex-col items-center gap-2 mb-2">
+                <div className="flex items-center justify-between w-full px-2">
+                  <div className="retro-phone-camera" />
+                  <div className="flex items-center gap-1 text-[10px] text-slate-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Online {traffic.onlineNow}</span>
                   </div>
-                ))}
+                </div>
+                <div className="retro-phone-speaker" />
               </div>
-              <form onSubmit={sendMessage} className="p-4 border-t border-white/10 flex gap-2">
-                <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Сообщение..." maxLength={1000} className="flex-1 min-h-[44px] px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="submit" className="min-h-[44px] px-4 rounded-xl bg-gradient-to-r from-blue-500 to-red-500 text-white hover:opacity-90 transition"><Send className="w-5 h-5" /></button>
-              </form>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-              <MessageCircle className="w-16 h-16 text-slate-600 mb-4" />
-              <p className="text-slate-400 mb-4">Войдите или зарегистрируйтесь, чтобы участвовать в чате.</p>
-              <div className="flex gap-3">
-                <button onClick={() => { setChatOpen(false); setAuthModal('login'); }} className="px-5 py-2.5 rounded-xl border border-white/20 text-slate-300 hover:bg-white/10">Войти</button>
-                <button onClick={() => { setChatOpen(false); setAuthModal('register'); }} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-red-500 text-white font-semibold">Регистрация</button>
+
+              {/* Status bar */}
+              <div className="flex items-center justify-between text-[11px] text-slate-300 px-2 py-1">
+                <div className="flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-emerald-400" />
+                  <span className="truncate max-w-[90px]">{user ? user.username : 'Гость'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>{new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div className="flex items-center gap-0.5">
+                    <span className="w-1 h-3 rounded-[2px] bg-lime-400" />
+                    <span className="w-1 h-2.5 rounded-[2px] bg-lime-300" />
+                    <span className="w-1 h-2 rounded-[2px] bg-lime-200" />
+                  </div>
+                </div>
               </div>
+
+              {/* Header row */}
+              <div className="flex items-center justify-between px-2 py-1 mb-1 border-b border-white/5">
+                <div className="flex items-center gap-1.5">
+                  <MessageCircle className="w-4 h-4 text-blue-400" />
+                  <span className="text-[12px] font-semibold text-slate-100 uppercase tracking-wide">America Chat</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleClearChat}
+                    className="p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition"
+                    title="Очистить чат"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatOpen(false)}
+                    className="p-1 rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat content or auth hint */}
+              {user ? (
+                <>
+                  <div ref={chatListRef} className="flex-1 overflow-y-auto px-2 py-1 space-y-2 text-[13px]">
+                    {chatMessages.length === 0 && (
+                      <p className="text-slate-500 text-[11px] text-center py-4">
+                        Пока сообщений нет. Напишите первым!
+                      </p>
+                    )}
+                    {chatMessages.map((m) => {
+                      const mine = m.userId === user.id
+                      const isImage = m.type === 'image'
+                      const isVideo = m.type === 'video'
+                      const hasMedia = isImage || isVideo
+                      return (
+                        <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-2.5 py-1.5 border text-[12px] ${
+                              mine
+                                ? 'bg-gradient-to-r from-blue-500/30 to-red-500/30 border-white/15 text-slate-50'
+                                : 'bg-slate-900/70 border-white/10 text-slate-100'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <span className="text-[10px] text-slate-300 truncate max-w-[100px]">
+                                {m.username}
+                              </span>
+                              <span className="text-[9px] text-slate-500">
+                                {m.time
+                                  ? new Date(m.time).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
+                                  : ''}
+                              </span>
+                            </div>
+
+                            {hasMedia && m.fileUrl && (
+                              <div className="mt-0.5 mb-0.5 rounded-xl overflow-hidden bg-black/40 border border-white/10">
+                                {isImage && (
+                                  <img
+                                    src={m.fileUrl}
+                                    alt={m.fileName || 'image'}
+                                    className="max-h-40 w-full object-cover"
+                                  />
+                                )}
+                                {isVideo && (
+                                  <video
+                                    src={m.fileUrl}
+                                    controls
+                                    className="max-h-40 w-full bg-black"
+                                  />
+                                )}
+                                {m.fileName && (
+                                  <div className="px-2 py-1 flex items-center gap-1 text-[10px] text-slate-300 bg-black/30">
+                                    {isImage ? (
+                                      <ImageIcon className="w-3.5 h-3.5 text-blue-300" />
+                                    ) : (
+                                      <Film className="w-3.5 h-3.5 text-amber-300" />
+                                    )}
+                                    <span className="truncate">{m.fileName}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {m.text && (
+                              <p className="text-[12px] leading-snug break-words">
+                                {m.text}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Dialer mini-panel */}
+                  <div className="px-2 pb-1 pt-2 border-t border-white/5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex-1 flex items-center gap-1.5 rounded-xl bg-black/30 border border-white/10 px-2 py-1">
+                        <PhoneCall className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <input
+                          value={callNumber}
+                          onChange={(e) => setCallNumber(e.target.value)}
+                          placeholder="+1 555 123 4567"
+                          className="flex-1 bg-transparent outline-none border-none text-[11px] text-slate-100 placeholder:text-slate-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCall}
+                        className="px-2 py-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 text-[11px] font-semibold text-white flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        Call
+                      </button>
+                    </div>
+                    <p className="mt-0.5 text-[9px] text-slate-500">
+                      Звонок откроется через приложение телефона на вашем устройстве.
+                    </p>
+                  </div>
+
+                  {/* Input row */}
+                  <form onSubmit={sendMessage} className="px-2 pt-1 pb-1.5 border-t border-white/5">
+                    {chatUploadError && (
+                      <p className="text-[10px] text-red-400 mb-1">{chatUploadError}</p>
+                    )}
+                    <div className="flex items-end gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <label className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-black/40 border border-white/10 text-slate-300 hover:bg-white/5 hover:text-white cursor-pointer transition">
+                          <Paperclip className="w-4 h-4" />
+                          <input
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={handleChatFileChange}
+                          />
+                        </label>
+                      </div>
+                      <div className="flex-1 flex flex-col gap-1">
+                        {chatAttachment && (
+                          <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-black/40 border border-dashed border-blue-500/40">
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-200">
+                              {chatAttachment.type.startsWith('image/') ? (
+                                <ImageIcon className="w-3.5 h-3.5 text-blue-300" />
+                              ) : (
+                                <Film className="w-3.5 h-3.5 text-amber-300" />
+                              )}
+                              <span className="truncate max-w-[130px]">{chatAttachment.name}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setChatAttachment(null)}
+                              className="p-0.5 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition"
+                              title="Убрать файл"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            placeholder={chatAttachment ? 'Комментарий к файлу...' : 'Сообщение...'}
+                            maxLength={1000}
+                            className="flex-1 min-h-[38px] px-3 rounded-xl bg-black/40 border border-white/10 text-[13px] text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <button
+                            type="submit"
+                            disabled={chatUploading}
+                            className="min-h-[38px] px-3 rounded-xl bg-gradient-to-r from-blue-500 to-red-500 text-white hover:opacity-90 disabled:opacity-60 flex items-center justify-center transition text-[13px]"
+                          >
+                            {chatUploading ? '...' : <Send className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+
+                  {/* Home button */}
+                  <div className="mt-1 flex items-center justify-center">
+                    <div className="retro-phone-home" />
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center px-6 text-center text-[13px]">
+                  <MessageCircle className="w-12 h-12 text-slate-600 mb-3" />
+                  <p className="text-slate-300 mb-3">
+                    Войдите или зарегистрируйтесь, чтобы участвовать в чате.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { setChatOpen(false); setAuthModal('login'); }}
+                      className="px-4 py-2 rounded-xl border border-white/20 text-slate-200 hover:bg-white/10 text-[13px]"
+                    >
+                      Войти
+                    </button>
+                    <button
+                      onClick={() => { setChatOpen(false); setAuthModal('register'); }}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-red-500 text-white font-semibold text-[13px]"
+                    >
+                      Регистрация
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 

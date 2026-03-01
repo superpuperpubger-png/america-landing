@@ -1,0 +1,16 @@
+===============================================
+  ОДИН ШАГ В NETLIFY (без этого регистрация не заработает)
+===============================================
+
+1. Зайди: https://app.netlify.com
+2. Открой сайт wonderful-conkies-774ddf
+3. Site configuration (или Настройки) → Environment variables
+4. Найди переменную VITE_API_URL → нажми Options → Edit values
+5. В поле Value впиши БЕЗ слеша в конце:
+   https://america-landing.onrender.com
+   (не https://america-landing.onrender.com/ )
+6. Сохрани (Save / Update variable)
+7. Deploys → Trigger deploy → Deploy project
+8. Подожди 1–2 минуты, обнови страницу сайта и попробуй регистрацию.
+
+Готово.

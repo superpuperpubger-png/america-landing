@@ -69,3 +69,24 @@ export async function recordVisit() {
   } catch (_) {}
   return null
 }
+
+export async function uploadChatFile({ file, userId, username, text }) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('userId', userId)
+  formData.append('username', username)
+  if (text && text.trim()) {
+    formData.append('text', text.trim())
+  }
+
+  const res = await fetch(`${API}/chat/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  const data = await parseJson(res)
+  if (!res.ok) {
+    throw new Error(data.error || 'Ошибка загрузки файла')
+  }
+  return data
+}
