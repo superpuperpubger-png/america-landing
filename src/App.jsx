@@ -142,6 +142,7 @@ export default function App() {
     socketRef.current = socket
     socket.on('chat:history', (history) => setChatMessages(history || []))
     socket.on('chat:message', (msg) => setChatMessages((prev) => [...prev, msg]))
+    socket.on('chat:cleared', () => setChatMessages([]))
     socket.emit('chat:history')
     return () => {
       socket.disconnect()
@@ -650,6 +651,12 @@ export default function App() {
                       const isImage = m.type === 'image'
                       const isVideo = m.type === 'video'
                       const hasMedia = isImage || isVideo
+                      const baseUrl = api.getSocketUrl().replace(/\/+$/, '')
+                      const mediaUrl = m.fileUrl
+                        ? (m.fileUrl.startsWith('http')
+                          ? m.fileUrl
+                          : `${baseUrl}${m.fileUrl}`)
+                        : null
                       return (
                         <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                           <div
@@ -670,18 +677,18 @@ export default function App() {
                               </span>
                             </div>
 
-                            {hasMedia && m.fileUrl && (
+                            {hasMedia && mediaUrl && (
                               <div className="mt-0.5 mb-0.5 rounded-xl overflow-hidden bg-black/40 border border-white/10">
                                 {isImage && (
                                   <img
-                                    src={m.fileUrl}
+                                    src={mediaUrl}
                                     alt={m.fileName || 'image'}
                                     className="max-h-40 w-full object-cover"
                                   />
                                 )}
                                 {isVideo && (
                                   <video
-                                    src={m.fileUrl}
+                                    src={mediaUrl}
                                     controls
                                     className="max-h-40 w-full bg-black"
                                   />

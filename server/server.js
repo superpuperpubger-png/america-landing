@@ -72,7 +72,7 @@ app.post('/api/traffic/visit', (req, res) => {
 app.get('/api/traffic', (req, res) => {
   res.json({
     totalVisits,
-    onlineNow: io.engine.clientsCount
+    onlineNow: io.of('/').sockets.size
   })
 })
 
