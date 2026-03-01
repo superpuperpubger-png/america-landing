@@ -1,0 +1,10 @@
+# Netlify — сборка и SPA (одна ссылка для всего сайта)
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Все пути ведут на index.html (React Router / SPA)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
