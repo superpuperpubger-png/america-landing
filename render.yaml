@@ -1,0 +1,17 @@
+# Render.com — бэкенд (чат, авторизация, трафик)
+# При подключении репозитория: New → Web Service → выбери этот репозиторий
+# Render подхватит конфиг. Root Directory в настройках сервиса: server
+
+services:
+  - type: web
+    name: america-chat-server
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true

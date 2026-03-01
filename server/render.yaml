@@ -1,0 +1,18 @@
+# Render.com — деплой бэкенда (чат + трафик)
+# Создай сервис: Dashboard → New → Web Service, подключи репозиторий или залей папку server
+# Root Directory укажи: server
+# Build: npm install
+# Start: npm start
+
+services:
+  - type: web
+    name: america-chat-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
